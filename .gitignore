@@ -1,3 +1,5 @@
 *.lnk
 .DS_Store
 Thumbs.db
+tools/cache/
+__pycache__/

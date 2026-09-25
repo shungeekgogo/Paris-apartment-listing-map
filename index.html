@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paris Apartment Listing Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #eceff2;
+    --panel: #ffffff;
+    --ink: #1b2433;
+    --muted: #5b6676;
+    --line: #d6dbe2;
+    --plaque: #1f3a68;          /* Paris street-sign blue */
+    --plaque-ink: #ffffff;
+    --accent: #2f7d6d;          /* Wallace-fountain green */
+    --accent-soft: #e2efec;
+    --brass: #a8792c;
+    --chip: #f3f5f8;
+    --shadow: 0 8px 30px rgba(20, 30, 50, .18);
+    --display: "Young Serif", Georgia, "Times New Roman", serif;
+    --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151d; --panel: #171e29; --ink: #e7ebf1; --muted: #9aa5b5; --line: #2a3443;
+      --plaque: #3b64a8; --accent: #5cb8a4; --accent-soft: #1b3531; --brass: #d3a452; --chip: #202a38;
+      --shadow: 0 8px 30px rgba(0,0,0,.5); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151d; --panel: #171e29; --ink: #e7ebf1; --muted: #9aa5b5; --line: #2a3443;
+    --plaque: #3b64a8; --accent: #5cb8a4; --accent-soft: #1b3531; --brass: #d3a452; --chip: #202a38;
+    --shadow: 0 8px 30px rgba(0,0,0,.5); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--body); }
+  button, select { font: inherit; color: inherit; }
+
+  .app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .head { padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
+  h1 { font: 400 22px/1.15 var(--display); margin: 0 0 4px; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0; }
+  .sample { margin-top: 10px; font-size: 12px; background: #fff4dc; color: #6b4a0f; border-radius: 6px; padding: 6px 9px; }
+  :root[data-theme="dark"] .sample { background: #3a2e14; color: #f0d59b; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sample { background: #3a2e14; color: #f0d59b; } }
+
+  .filters { padding: 14px 20px; display: grid; gap: 14px; border-bottom: 1px solid var(--line); }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .label button { background: none; border: 0; padding: 0; color: var(--accent); font-size: 11px; letter-spacing: .04em; cursor: pointer; text-transform: none; font-weight: 600; }
+  .districts { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
+  .plaque { border: 2px solid var(--line); background: var(--chip); border-radius: 4px; padding: 5px 0 4px; cursor: pointer; text-align: center; font: 500 13px var(--mono); line-height: 1; }
+  .plaque sup { font-size: 8px; }
+  .plaque[aria-pressed="true"] { background: var(--plaque); color: var(--plaque-ink); border-color: var(--plaque); box-shadow: inset 0 0 0 1.5px var(--plaque-ink); }
+  .plaque:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .range { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
+  .range span { color: var(--muted); font-size: 12px; }
+  select { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--chip); cursor: pointer; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .results-head { padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+  .results-head strong { font-variant-numeric: tabular-nums; }
+  .results-head select { width: auto; padding: 4px 6px; font-size: 12.5px; }
+  .list { overflow-y: auto; flex: 1; min-height: 0; padding: 0 12px 16px; display: grid; gap: 6px; align-content: start; }
+  .item { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 10px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; background: none; text-align: left; width: 100%; }
+  .item:hover { background: var(--chip); }
+  .item.active { border-color: var(--accent); background: var(--accent-soft); }
+  .item .arr { background: var(--plaque); color: var(--plaque-ink); border-radius: 4px; font: 500 12px var(--mono); text-align: center; padding: 5px 0; }
+  .item .t { font-weight: 600; font-size: 13px; line-height: 1.25; }
+  .item .m { color: var(--muted); font-size: 12px; }
+  .item .p { font: 500 13px var(--mono); text-align: right; white-space: nowrap; }
+  .item .pm { color: var(--muted); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); padding: 20px 8px; text-align: center; }
+
+  main { position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+  .legend { position: absolute; left: 12px; bottom: 22px; z-index: 500; background: var(--panel); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 12px; font-size: 12px; display: grid; gap: 4px; }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+  .dot.exact { background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--accent); }
+  .dot.street { background: var(--brass); border: 2px solid #fff; box-shadow: 0 0 0 3px rgba(168,121,44,.35); }
+  .dot.district { background: transparent; border: 2px dashed var(--plaque); }
+
+  /* map markers */
+  .pin { display: grid; place-items: center; }
+  .pin b { display: block; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); transition: transform .15s; }
+  .pin.exact b { width: 16px; height: 16px; background: #2f7d6d; }
+  .pin.street b { width: 16px; height: 16px; background: #a8792c; }
+  .pin.district b { width: 18px; height: 18px; background: rgba(255,255,255,.85); border: 2.5px dashed #1f3a68; }
+  .pin.sel b { transform: scale(1.5); }
+  .pin .price-tag { position: absolute; top: -22px; white-space: nowrap; background: #1b2433; color: #fff; font: 500 11px var(--mono); padding: 2px 5px; border-radius: 3px; pointer-events: none; }
+  .district-label { font: 500 12px var(--mono); color: #1f3a68; background: rgba(255,255,255,.85); border: 1.5px solid #1f3a68; border-radius: 3px; padding: 1px 5px; white-space: nowrap; }
+
+  /* detail card */
+  .detail { position: absolute; top: 12px; right: 12px; width: 380px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); overflow-y: auto; z-index: 600; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); }
+  .photos { position: relative; background: #000; border-radius: 12px 12px 0 0; overflow: hidden; }
+  .photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+  .photos .cap { position: absolute; left: 10px; bottom: 8px; color: #fff; font-size: 11px; background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 4px; }
+  .photos .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255,255,255,.9); color: #1b2433; cursor: pointer; font-size: 18px; line-height: 1; }
+  .photos .prev { left: 8px; } .photos .next { right: 8px; }
+  .photos .count { position: absolute; right: 10px; bottom: 8px; color: #fff; font: 500 11px var(--mono); background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 4px; }
+  .close { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(255,255,255,.92); color: #1b2433; cursor: pointer; font-size: 18px; line-height: 1; z-index: 2; }
+  .dbody { padding: 14px 16px 16px; display: grid; gap: 12px; }
+  .price { font: 400 28px/1 var(--display); }
+  .ppm { color: var(--muted); font-size: 13px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .dtitle { font-weight: 600; font-size: 15px; }
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .facts div { background: var(--chip); border-radius: 6px; padding: 7px 9px; }
+  .facts small { display: block; color: var(--muted); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .facts b { font: 500 14px var(--mono); }
+  .loc { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; width: fit-content; }
+  .badge.exact { background: var(--accent-soft); color: var(--accent); }
+  .badge.street { background: rgba(168,121,44,.15); color: var(--brass); }
+  .badge.district { background: rgba(31,58,104,.12); color: var(--plaque); }
+  :root[data-theme="dark"] .badge.district { color: #9dbbf0; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.district { color: #9dbbf0; } }
+  .where { font-weight: 600; }
+  .clue { color: var(--muted); font-size: 12.5px; }
+  .src a { color: var(--accent); }
+
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    aside { max-height: 52vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    .head { padding: 12px 16px 10px; } .filters { padding: 12px 16px; } .results-head { padding: 8px 16px; }
+    .detail { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-width: none; max-height: 85%; border-radius: 12px 12px 0 0; }
+    .legend { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .pin b { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="head">
+      <h1>Paris Apartment Listing Map</h1>
+      <p class="sub">Apartments for sale, 1<sup>er</sup>–9<sup>e</sup> arrondissements</p>
+      <div class="sample" id="sampleNote">Sample listings for testing. Replace them in <code>listings.js</code>.</div>
+    </div>
+
+    <div class="filters">
+      <div>
+        <div class="label">Arrondissement <button id="allArr" type="button">Select all</button></div>
+        <div class="districts" id="districts"></div>
+      </div>
+      <div>
+        <div class="label">Asking price</div>
+        <div class="range"><select id="priceMin" aria-label="Minimum price"></select><span>to</span><select id="priceMax" aria-label="Maximum price"></select></div>
+      </div>
+      <div>
+        <div class="label">Floor space</div>
+        <div class="range"><select id="surfMin" aria-label="Minimum floor space"></select><span>to</span><select id="surfMax" aria-label="Maximum floor space"></select></div>
+      </div>
+      <div>
+        <div class="label">Price per m²</div>
+        <div class="range"><select id="ppmMin" aria-label="Minimum price per square meter"></select><span>to</span><select id="ppmMax" aria-label="Maximum price per square meter"></select></div>
+      </div>
+      <div class="row2">
+        <div>
+          <div class="label">Rooms</div>
+          <select id="rooms" aria-label="Rooms">
+            <option value="0">Any</option><option value="1">Studio (1)</option><option value="2">2 rooms</option>
+            <option value="3">3 rooms</option><option value="4">4 rooms</option><option value="5">5+ rooms</option>
+          </select>
+        </div>
+        <div>
+          <div class="label">Location known</div>
+          <select id="precision" aria-label="Location precision">
+            <option value="any">Any</option><option value="exact">Exact address</option>
+            <option value="street">Street or better</option><option value="district">District only</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-head">
+      <span><strong id="count">0</strong> apartments</span>
+      <select id="sort" aria-label="Sort">
+        <option value="price-asc">Price ↑</option><option value="price-desc">Price ↓</option>
+        <option value="ppm-asc">€/m² ↑</option><option value="ppm-desc">€/m² ↓</option>
+        <option value="surf-desc">Largest first</option>
+      </select>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <main>
+    <div id="map"></div>
+    <div class="legend" aria-label="Legend">
+      <div><span class="dot exact"></span>Exact address</div>
+      <div><span class="dot street"></span>Street (estimated from photos)</div>
+      <div><span class="dot district"></span>District only</div>
+    </div>
+    <div class="detail" id="detail" hidden></div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="districts.js"></script>
+<script src="listings.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const eur = n => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
+  const short = n => n >= 1e6 ? (n / 1e6).toFixed(n % 1e6 ? 2 : 0).replace(/\.?0+$/, "") + " M€" : Math.round(n / 1000) + " k€";
+  const ord = n => n === 1 ? "1er" : n + "e";
+  const ordHtml = n => n === 1 ? "1<sup>er</sup>" : n + "<sup>e</sup>";
+
+  const DISTRICT_CENTER = {
+    1: [48.8625, 2.3363], 2: [48.8683, 2.3428], 3: [48.8630, 2.3600], 4: [48.8543, 2.3576], 5: [48.8445, 2.3507],
+    6: [48.8491, 2.3328], 7: [48.8562, 2.3122], 8: [48.8727, 2.3125], 9: [48.8770, 2.3375]
+  };
+
+  // ---- data prep ----
+  const listings = (window.LISTINGS || []).filter(l => l.district >= 1 && l.district <= 9).map((l, i) => {
+    const o = { ...l, ppm: Math.round(l.price / l.surface) };
+    if (o.precision === "district" || o.lat == null || o.lng == null || o.lat === "") {
+      // spread district-only listings around the district center so they don't overlap
+      const c = DISTRICT_CENTER[o.district], a = (i * 2.399) % (2 * Math.PI), r = 0.0018 + (i % 3) * 0.0009;
+      o.lat = c[0] + Math.sin(a) * r; o.lng = c[1] + Math.cos(a) * r * 1.5; o.precision = "district";
+    }
+    return o;
+  });
+
+  // ---- filter controls ----
+  const opts = (sel, values, fmt, anyLabel) => {
+    sel.innerHTML = values.map(v => `<option value="${v}">${v === 0 || v === Infinity ? anyLabel : fmt(v)}</option>`).join("");
+  };
+  const PRICE = [0, 300000, 400000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000];
+  const SURF = [0, 20, 30, 40, 50, 60, 80, 100, 150, 200];
+  const PPM = [0, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 16000, 18000, 20000];
+  opts($("priceMin"), PRICE, eur, "No min"); opts($("priceMax"), [...PRICE.slice(1), Infinity], eur, "No max");
+  opts($("surfMin"), SURF, v => v + " m²", "No min"); opts($("surfMax"), [...SURF.slice(1), Infinity], v => v + " m²", "No max");
+  opts($("ppmMin"), PPM, v => eur(v) + "/m²", "No min"); opts($("ppmMax"), [...PPM.slice(1), Infinity], v => eur(v) + "/m²", "No max");
+  $("priceMax").value = $("surfMax").value = $("ppmMax").value = "Infinity";
+
+  const selected = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  $("districts").innerHTML = [1,2,3,4,5,6,7,8,9].map(n =>
+    `<button type="button" class="plaque" data-n="${n}" aria-pressed="true" title="${ord(n)} arrondissement">${ordHtml(n)}</button>`).join("");
+  $("districts").addEventListener("click", e => {
+    const b = e.target.closest(".plaque"); if (!b) return;
+    const n = +b.dataset.n;
+    selected.has(n) ? selected.delete(n) : selected.add(n);
+    render();
+  });
+  $("allArr").addEventListener("click", () => {
+    if (selected.size === 9) selected.clear(); else [1,2,3,4,5,6,7,8,9].forEach(n => selected.add(n));
+    render();
+  });
+  ["priceMin","priceMax","surfMin","surfMax","ppmMin","ppmMax","rooms","precision","sort"].forEach(id => $(id).addEventListener("change", render));
+
+  // ---- map ----
+  const map = L.map("map", { zoomControl: true, attributionControl: true }).setView([48.861, 2.334], 14);
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light";
+  const esri = layer => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
+  const tileOpts = { maxZoom: 17, maxNativeZoom: 16 };
+  L.tileLayer(esri(dark ? "World_Dark_Gray_Base" : "World_Light_Gray_Base"),
+    { ...tileOpts, attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' }).addTo(map);
+  L.tileLayer(esri(dark ? "World_Dark_Gray_Reference" : "World_Light_Gray_Reference"), tileOpts).addTo(map);
+
+  const districtLayers = {};
+  L.geoJSON(window.DISTRICTS, {
+    style: () => ({ color: "#1f3a68", weight: 1.5, opacity: .7, fillColor: "#1f3a68", fillOpacity: .04 }),
+    onEachFeature: (f, layer) => {
+      districtLayers[f.properties.n] = layer;
+      layer.on("click", () => { selected.clear(); selected.add(f.properties.n); render(); map.fitBounds(layer.getBounds(), { padding: [20, 20] }); });
+    }
+  }).addTo(map);
+  Object.entries(DISTRICT_CENTER).forEach(([n, c]) => {
+    L.marker(c, { interactive: false, icon: L.divIcon({ className: "", html: `<span class="district-label">${ordHtml(+n)}</span>`, iconSize: null }) }).addTo(map);
+  });
+  map.fitBounds(L.geoJSON(window.DISTRICTS).getBounds(), { padding: [10, 10] });
+
+  const markers = {};
+  let highlight = null, activeId = null;
+  const pinIcon = (l, sel) => L.divIcon({
+    className: "", iconSize: [26, 26], iconAnchor: [13, 13],
+    html: `<div class="pin ${l.precision}${sel ? " sel" : ""}" style="width:26px;height:26px;position:relative">${sel ? `<span class="price-tag">${short(l.price)}</span>` : ""}<b></b></div>`
+  });
+  listings.forEach(l => {
+    const m = L.marker([l.lat, l.lng], { icon: pinIcon(l, false), title: `${l.title} — ${eur(l.price)}`, riseOnHover: true });
+    m.on("click", () => open(l.id));
+    markers[l.id] = m;
+  });
+
+  // ---- filtering ----
+  function filtered() {
+    const v = id => Number($(id).value);
+    const rooms = v("rooms"), prec = $("precision").value;
+    const out = listings.filter(l =>
+      selected.has(l.district) &&
+      l.price >= v("priceMin") && l.price <= v("priceMax") &&
+      l.surface >= v("surfMin") && l.surface <= v("surfMax") &&
+      l.ppm >= v("ppmMin") && l.ppm <= v("ppmMax") &&
+      (rooms === 0 || (rooms === 5 ? l.rooms >= 5 : l.rooms === rooms)) &&
+      (prec === "any" || (prec === "street" ? l.precision !== "district" : l.precision === prec))
+    );
+    const s = $("sort").value;
+    const key = { "price-asc": l => l.price, "price-desc": l => -l.price, "ppm-asc": l => l.ppm, "ppm-desc": l => -l.ppm, "surf-desc": l => -l.surface }[s];
+    return out.sort((a, b) => key(a) - key(b));
+  }
+
+  function render() {
+    document.querySelectorAll(".plaque").forEach(b => b.setAttribute("aria-pressed", selected.has(+b.dataset.n)));
+    $("allArr").textContent = selected.size === 9 ? "Clear" : "Select all";
+    Object.entries(districtLayers).forEach(([n, layer]) =>
+      layer.setStyle({ fillOpacity: selected.has(+n) ? .06 : 0, opacity: selected.has(+n) ? .75 : .25 }));
+
+    const rows = filtered();
+    const ids = new Set(rows.map(l => l.id));
+    listings.forEach(l => {
+      const m = markers[l.id];
+      if (ids.has(l.id)) { if (!map.hasLayer(m)) m.addTo(map); } else if (map.hasLayer(m)) map.removeLayer(m);
+    });
+    if (activeId && !ids.has(activeId)) close();
+
+    $("count").textContent = rows.length;
+    $("list").innerHTML = rows.length ? rows.map(l => `
+      <button type="button" class="item${l.id === activeId ? " active" : ""}" data-id="${l.id}">
+        <span class="arr">${ord(l.district)}</span>
+        <span><span class="t">${esc(l.title)}</span><br><span class="m">${l.surface} m² · ${l.rooms === 1 ? "studio" : l.rooms + " rooms"} · ${esc(whereShort(l))}</span></span>
+        <span><span class="p">${short(l.price)}</span><br><span class="pm">${eur(l.ppm)}/m²</span></span>
+      </button>`).join("") : `<div class="empty">No apartments match these filters.<br>Try widening the price or floor-space range.</div>`;
+  }
+  $("list").addEventListener("click", e => { const b = e.target.closest(".item"); if (b) open(b.dataset.id, true); });
+
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const whereShort = l => l.precision === "district" ? `${ord(l.district)} arr.` : l.street;
+
+  // ---- detail card ----
+  let photoIdx = 0;
+  function open(id, pan) {
+    const l = listings.find(x => x.id === id); if (!l) return;
+    if (activeId && markers[activeId]) markers[activeId].setIcon(pinIcon(listings.find(x => x.id === activeId), false));
+    activeId = id;
+    markers[id].setIcon(pinIcon(l, true)).setZIndexOffset(1000);
+    if (highlight) { map.removeLayer(highlight); highlight = null; }
+    if (l.precision === "street") {
+      highlight = L.circle([l.lat, l.lng], { radius: 140, color: "#a8792c", weight: 2, dashArray: "5 5", fillOpacity: .08 }).addTo(map);
+    } else if (l.precision === "district") {
+      highlight = L.geoJSON(window.DISTRICTS.features.find(f => f.properties.n === l.district),
+        { style: { color: "#1f3a68", weight: 3, dashArray: "6 6", fillOpacity: .12, fillColor: "#1f3a68" }, interactive: false }).addTo(map);
+    }
+    if (pan) {
+      if (l.precision === "district") map.fitBounds(highlight.getBounds(), { padding: [30, 30] });
+      else {
+        // keep the pin visible beside the detail card on wide screens
+        const z = Math.max(map.getZoom(), 16), wide = innerWidth > 820;
+        const pt = map.project([l.lat, l.lng], z).add([wide ? 200 : 0, wide ? 0 : 150]);
+        map.setView(map.unproject(pt, z), z);
+      }
+    }
+    photoIdx = 0;
+    drawDetail(l);
+    render();
+  }
+  function close() {
+    if (activeId && markers[activeId]) markers[activeId].setIcon(pinIcon(listings.find(x => x.id === activeId), false)).setZIndexOffset(0);
+    activeId = null;
+    if (highlight) { map.removeLayer(highlight); highlight = null; }
+    $("detail").hidden = true;
+    document.querySelectorAll(".item.active").forEach(b => b.classList.remove("active"));
+  }
+
+  function drawDetail(l) {
+    const photos = (l.photos && l.photos.length) ? l.photos.slice(0, 2).map(src => ({ src, cap: "" }))
+      : [{ src: illustrate(l, "facade"), cap: "Illustration · façade" }, { src: illustrate(l, "interior"), cap: "Illustration · living room" }];
+    const p = photos[photoIdx];
+    const badge = { exact: "Exact address", street: "Street · estimated", district: "District only" }[l.precision];
+    const where = l.precision === "district" ? `Somewhere in the ${ord(l.district)} arrondissement` : `${esc(l.street)}, ${ord(l.district)} arrondissement`;
+    $("detail").innerHTML = `
+      <button class="close" id="closeBtn" type="button" aria-label="Close">×</button>
+      <div class="photos">
+        <img src="${esc(p.src)}" alt="${esc(l.title)} photo ${photoIdx + 1}">
+        ${p.cap ? `<span class="cap">${p.cap}</span>` : ""}
+        ${photos.length > 1 ? `<button class="nav prev" type="button" aria-label="Previous photo">‹</button><button class="nav next" type="button" aria-label="Next photo">›</button><span class="count">${photoIdx + 1}/${photos.length}</span>` : ""}
+      </div>
+      <div class="dbody">
+        <div><div class="price">${eur(l.price)}</div><div class="ppm">${eur(l.ppm)} per m²</div></div>
+        <div class="dtitle">${esc(l.title)}</div>
+        <div class="facts">
+          <div><small>Floor space</small><b>${l.surface} m²</b></div>
+          <div><small>Rooms</small><b>${l.rooms === 1 ? "Studio" : l.rooms}</b></div>
+          <div><small>District</small><b>${ord(l.district)}</b></div>
+        </div>
+        <div class="clue">${esc(l.floor || "")}</div>
+        <div class="loc">
+          <span class="badge ${l.precision}">${badge}</span>
+          <span class="where">${where}</span>
+          <span class="clue">${esc(l.clue || "")}</span>
+        </div>
+        ${l.source ? `<div class="src"><a href="${esc(l.source)}" target="_blank" rel="noopener">View original listing ↗</a></div>` : ""}
+      </div>`;
+    $("detail").hidden = false;
+    $("closeBtn").onclick = close;
+    const nav = d => { photoIdx = (photoIdx + d + photos.length) % photos.length; drawDetail(l); };
+    const prev = $("detail").querySelector(".prev"), next = $("detail").querySelector(".next");
+    if (prev) prev.onclick = () => nav(-1);
+    if (next) next.onclick = () => nav(1);
+  }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+
+  // ---- illustrations for listings without photos ----
+  const cache = {};
+  function rng(seed) { let s = 0; for (const c of seed) s = (s * 31 + c.charCodeAt(0)) >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+  function illustrate(l, kind) {
+    const key = l.id + kind; if (cache[key]) return cache[key];
+    const W = 800, H = 600, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d"), r = rng(key);
+    if (kind === "facade") {
+      const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, "#9fb7cf"); sky.addColorStop(1, "#dfe7ee");
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      const stone = ["#e6dac4", "#dccfb6", "#e9e0cf", "#d8c9ad"][Math.floor(r() * 4)];
+      g.fillStyle = stone; g.fillRect(40, 130, W - 80, H - 130);
+      // zinc mansard roof
+      g.fillStyle = "#7d8791"; g.beginPath(); g.moveTo(40, 130); g.lineTo(80, 60); g.lineTo(W - 80, 60); g.lineTo(W - 40, 130); g.fill();
+      g.fillStyle = "#b24b3a"; for (let x = 140; x < W - 100; x += 180) g.fillRect(x, 30, 26, 34);
+      const cols = 5, floors = 5, fw = (W - 80) / cols, fh = (H - 170) / floors;
+      for (let f = 0; f < floors; f++) {
+        const y = 150 + f * fh;
+        g.fillStyle = "rgba(0,0,0,.08)"; g.fillRect(40, y + fh - 6, W - 80, 3);
+        for (let i = 0; i < cols; i++) {
+          const x = 40 + i * fw + fw * 0.28, w = fw * 0.44, h = fh * 0.7;
+          if (f === floors - 1 && i === 2) { g.fillStyle = "#2b3440"; g.fillRect(x - 10, y + 8, w + 20, fh - 8); continue; }
+          g.fillStyle = r() > .7 ? "#f4d99a" : "#3c4a58"; g.fillRect(x, y + 8, w, h);
+          g.strokeStyle = "#f5f1e8"; g.lineWidth = 3; g.strokeRect(x, y + 8, w, h);
+          g.beginPath(); g.moveTo(x + w / 2, y + 8); g.lineTo(x + w / 2, y + 8 + h); g.stroke();
+          if (f === 1 || f === 4) { // wrought-iron balconies on 2nd and 5th floors
+            g.strokeStyle = "#20252b"; g.lineWidth = 2; g.strokeRect(x - 8, y + 8 + h * .62, w + 16, h * .38);
+            for (let k = x - 4; k < x + w + 8; k += 7) { g.beginPath(); g.moveTo(k, y + 8 + h * .62); g.lineTo(k, y + 8 + h); g.stroke(); }
+          }
+        }
+      }
+      if (r() > .3) { g.fillStyle = "#1f3a68"; g.fillRect(56, 300, 110, 34); g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(60, 304, 102, 26);
+        g.fillStyle = "#fff"; g.font = "600 13px sans-serif"; g.fillText(ord(l.district).toUpperCase() + " ARR.", 72, 322); }
+    } else {
+      const wall = ["#f1ede6", "#e8ecef", "#efe6dc"][Math.floor(r() * 3)];
+      g.fillStyle = wall; g.fillRect(0, 0, W, H);
+      // mouldings
+      g.strokeStyle = "rgba(0,0,0,.12)"; g.lineWidth = 3; g.strokeRect(60, 60, 200, 300); g.strokeRect(540, 60, 200, 300); g.strokeRect(15, 15, W - 30, 30);
+      // tall window
+      g.fillStyle = "#b9d0e2"; g.fillRect(300, 50, 200, 360); g.strokeStyle = "#fff"; g.lineWidth = 8; g.strokeRect(300, 50, 200, 360);
+      g.beginPath(); g.moveTo(400, 50); g.lineTo(400, 410); g.moveTo(300, 170); g.lineTo(500, 170); g.moveTo(300, 290); g.lineTo(500, 290); g.stroke();
+      g.fillStyle = "#c9bca8"; g.fillRect(320, 80, 160, 70);
+      // herringbone parquet
+      g.fillStyle = "#b98a58"; g.fillRect(0, 430, W, H - 430);
+      g.strokeStyle = "rgba(60,35,10,.35)"; g.lineWidth = 1.5;
+      for (let y = 430; y < H; y += 24) for (let x = -40; x < W; x += 48) {
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + 24, y + 24); g.moveTo(x + 24, y + 24); g.lineTo(x + 48, y); g.stroke();
+      }
+      // marble fireplace
+      g.fillStyle = "#f2efeb"; g.fillRect(70, 300, 170, 130); g.fillStyle = "#2a2a2a"; g.fillRect(105, 340, 100, 90);
+      g.fillStyle = "#f2efeb"; g.fillRect(60, 292, 190, 14);
+      // sofa
+      g.fillStyle = ["#39566e", "#6e5a3c", "#5d6b5a"][Math.floor(r() * 3)]; g.fillRect(540, 380, 220, 70); g.fillRect(540, 340, 220, 50);
+    }
+    return (cache[key] = c.toDataURL("image/jpeg", .82));
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

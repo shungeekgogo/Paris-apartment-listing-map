@@ -98,7 +98,17 @@
   .pin.district b { width: 18px; height: 18px; background: rgba(255,255,255,.85); border: 2.5px dashed #1f3a68; }
   .pin.sel b { transform: scale(1.5); }
   .pin .price-tag { position: absolute; top: -22px; white-space: nowrap; background: #1b2433; color: #fff; font: 500 11px var(--mono); padding: 2px 5px; border-radius: 3px; pointer-events: none; }
-  .district-label { font: 500 12px var(--mono); color: #1f3a68; background: rgba(255,255,255,.85); border: 1.5px solid #1f3a68; border-radius: 3px; padding: 1px 5px; white-space: nowrap; }
+  .district-label { font: 500 12px var(--mono); color: #fff; border: 1.5px solid #fff; border-radius: 3px; padding: 1px 5px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .q-label { font: italic 700 11.5px/1.1 var(--body); color: #3b2a63; text-align: center; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; pointer-events: none; }
+  :root[data-theme="dark"] .q-label { color: #e7ebf1; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .q-label { color: #e7ebf1; text-shadow: 0 0 3px #000, 0 0 3px #000; } }
+  .hide-q .q-label { display: none; }
+  /* soften the street map a little so borders and pins stand out */
+  .leaflet-tile-pane { filter: saturate(.8) brightness(1.02); }
+  .legend hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .legend label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .qline { width: 16px; border-top: 2px dashed #26303d; display: inline-block; }
 
   /* detail card */
   .detail { position: absolute; top: 12px; right: 12px; width: 380px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); overflow-y: auto; z-index: 600; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); }
@@ -227,6 +237,8 @@
       <div><span class="dot street"></span>Street (from listing text or photos)</div>
       <div><span class="dot area"></span>Approximate area</div>
       <div><span class="dot district"></span>District only</div>
+      <hr>
+      <label><input type="checkbox" id="showQ" checked> <span class="qline"></span>Quartiers administratifs</label>
     </div>
     <div class="detail" id="detail" hidden></div>
   </main>
@@ -234,6 +246,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="districts.js"></script>
+<script src="quartiers.js"></script>
 <script src="listings-bienici.js"></script>
 <script src="listings-newspaper.js"></script>
 <script>
@@ -296,24 +309,61 @@
   // ---- map ----
   const map = L.map("map", { zoomControl: true, attributionControl: true }).setView([48.861, 2.334], 14);
   const dark = matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light";
-  const esri = layer => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
-  const tileOpts = { maxZoom: 17, maxNativeZoom: 16 };
-  L.tileLayer(esri(dark ? "World_Dark_Gray_Base" : "World_Light_Gray_Base"),
-    { ...tileOpts, attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' }).addTo(map);
-  L.tileLayer(esri(dark ? "World_Dark_Gray_Reference" : "World_Light_Gray_Reference"), tileOpts).addTo(map);
+  const esri = layer => `https://server.arcgisonline.com/ArcGIS/rest/services/${layer}/MapServer/tile/{z}/{y}/{x}`;
+  const attribution = "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors";
+  if (dark) {
+    const o = { maxZoom: 18, maxNativeZoom: 16 };
+    L.tileLayer(esri("Canvas/World_Dark_Gray_Base"), { ...o, attribution }).addTo(map);
+    L.tileLayer(esri("Canvas/World_Dark_Gray_Reference"), o).addTo(map);
+  } else {
+    // full-color street map: parks, water, buildings and street names
+    L.tileLayer(esri("World_Street_Map"), { maxZoom: 19, attribution }).addTo(map);
+  }
+
+  // one color per arrondissement
+  const ARR_COLOR = { 1: "#d1495b", 2: "#e09f1f", 3: "#00798c", 4: "#7b4fa0", 5: "#2e6fb5",
+                      6: "#e0601b", 7: "#2f8a3e", 8: "#b5357e", 9: "#7a5c2e" };
 
   const districtLayers = {};
   L.geoJSON(window.DISTRICTS, {
-    style: () => ({ color: "#1f3a68", weight: 1.5, opacity: .7, fillColor: "#1f3a68", fillOpacity: .04 }),
+    style: f => ({ color: ARR_COLOR[f.properties.n], weight: 3, opacity: .9, fillColor: ARR_COLOR[f.properties.n], fillOpacity: .06 }),
     onEachFeature: (f, layer) => {
       districtLayers[f.properties.n] = layer;
       layer.on("click", () => { selected.clear(); selected.add(f.properties.n); render(); map.fitBounds(layer.getBounds(), { padding: [20, 20] }); });
     }
   }).addTo(map);
   Object.entries(DISTRICT_CENTER).forEach(([n, c]) => {
-    L.marker(c, { interactive: false, icon: L.divIcon({ className: "", html: `<span class="district-label">${ordHtml(+n)}</span>`, iconSize: null }) }).addTo(map);
+    L.marker(c, { interactive: false, icon: L.divIcon({ className: "", html: `<span class="district-label" style="background:${ARR_COLOR[n]}">${ordHtml(+n)}</span>`, iconSize: null }) }).addTo(map);
   });
-  map.fitBounds(districtLayers[6].getBounds(), { padding: [20, 20] });
+  // quartiers administratifs: thin dashed borders with their names
+  const quartierLayer = L.geoJSON(window.QUARTIERS, {
+    style: () => ({ color: "#26303d", weight: 2, opacity: .9, dashArray: "5 5", fill: false }),
+    interactive: false
+  }).addTo(map);
+  const quartierLabels = L.layerGroup((window.QUARTIERS?.features || []).map(f =>
+    L.marker([f.properties.lat, f.properties.lng], { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "", iconSize: null, html: `<span class="q-label">${f.properties.name.replace(/-/g, "-<wbr>")}</span>` }) })
+  )).addTo(map);
+  // names only when zoomed in enough to read them
+  const syncQ = () => {
+    const on = $("showQ").checked;
+    on ? quartierLayer.addTo(map) : map.removeLayer(quartierLayer);
+    document.getElementById("map").classList.toggle("hide-q", !on || map.getZoom() < 14);
+  };
+  quartierLabels.eachLayer(m => m.setZIndexOffset(-1000));
+  $("showQ").addEventListener("change", syncQ);
+  map.on("zoomend", syncQ);
+
+  const fitStart = () => map.fitBounds(districtLayers[6].getBounds(), { padding: [20, 20] });
+  fitStart();
+  syncQ();
+  // if the page loaded while hidden (zero-size map), fit again once it becomes visible
+  if (!document.getElementById("map").clientWidth) {
+    const ro = new ResizeObserver(() => {
+      if (document.getElementById("map").clientWidth) { map.invalidateSize(); fitStart(); ro.disconnect(); }
+    });
+    ro.observe(document.getElementById("map"));
+  }
 
   const markers = {};
   let highlight = null, activeId = null;
@@ -351,7 +401,7 @@
     document.querySelectorAll(".plaque").forEach(b => b.setAttribute("aria-pressed", selected.has(+b.dataset.n)));
     $("allArr").textContent = selected.size === 9 ? "Clear" : "Select all";
     Object.entries(districtLayers).forEach(([n, layer]) =>
-      layer.setStyle({ fillOpacity: selected.has(+n) ? .06 : 0, opacity: selected.has(+n) ? .75 : .25 }));
+      layer.setStyle({ fillOpacity: selected.has(+n) ? .1 : .03, opacity: 1, weight: selected.has(+n) ? 4.5 : 3 }));
 
     const rows = filtered();
     const ids = new Set(rows.map(l => l.id));
@@ -364,7 +414,7 @@
     $("count").textContent = rows.length;
     $("list").innerHTML = rows.length ? rows.map(l => `
       <button type="button" class="item${l.id === activeId ? " active" : ""}" data-id="${l.id}">
-        <span class="arr">${ord(l.district)}</span>
+        <span class="arr" style="background:${ARR_COLOR[l.district]}">${ord(l.district)}</span>
         <span><span class="t">${esc(l.title)}</span><br><span class="m">${esc(whereShort(l))}${l.elevator ? " · elevator" : ""}</span><br><span class="srcline">${l.sourceType === "newspaper" ? '<span class="paper">Newspaper</span> ' : ""}${esc(l.source)}${l.seller ? " · " + esc(l.seller) : ""}</span></span>
         <span><span class="p">${short(l.price)}</span><br><span class="pm">${eur(l.ppm)}/m²</span></span>
       </button>`).join("") : `<div class="empty">No apartments match these filters.<br>Try widening the price or floor-space range.</div>`;
@@ -387,7 +437,7 @@
       highlight = L.circle([l.lat, l.lng], { radius: l.radius || 140, color: col, weight: 2, dashArray: "5 5", fillOpacity: .08, interactive: false }).addTo(map);
     } else if (l.precision === "district") {
       highlight = L.geoJSON(window.DISTRICTS.features.find(f => f.properties.n === l.district),
-        { style: { color: "#1f3a68", weight: 3, dashArray: "6 6", fillOpacity: .12, fillColor: "#1f3a68" }, interactive: false }).addTo(map);
+        { style: { color: ARR_COLOR[l.district], weight: 4, dashArray: "6 6", fillOpacity: .15, fillColor: ARR_COLOR[l.district] }, interactive: false }).addTo(map);
     }
     if (pan) {
       if (l.precision === "district") map.fitBounds(highlight.getBounds(), { padding: [30, 30] });

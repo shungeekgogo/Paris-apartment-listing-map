@@ -35,3 +35,12 @@ python tools/build_bienici.py --refresh
 Without `--refresh` it rebuilds from the downloads cached in `tools/cache` (not committed). Photo-based location findings are kept in `PHOTO_NOTES` inside the script.
 
 Map tiles: Esri World Street Map (Dark Gray Canvas in dark mode). Map library: Leaflet 1.9.4. Street lookups: api-adresse.data.gouv.fr.
+
+## Working on multiple PCs
+
+GitHub is the source of truth, so every PC has the same files and folder structure.
+
+- On a new PC, run `tokyo-meiten-map\tools\sync-all.cmd` in the Claude folder to clone all repositories (or `git clone` this one). Windows needs Git for Windows.
+- When Claude Code opens, the SessionStart hook (`.claude/hooks/sync-from-github.sh`) checks GitHub and updates any out-of-date files on this PC. If it can't (uncommitted changes or a conflict), it says so instead of overwriting anything.
+- When work ends, the Stop hook (`.claude/hooks/check-pushed.sh`) catches anything not yet committed or pushed and sends Claude back to push it.
+- The hook configuration lives in `.claude/settings.json` (tracked in git).
